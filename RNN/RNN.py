@@ -13,17 +13,8 @@ import tensorflow as tf
 from tensorflow.python.ops.seq2seq import sequence_loss
 from model import LanguageModel
 
-# Let's set the parameters of our model
-# http://arxiv.org/pdf/1409.2329v4.pdf shows parameters that would achieve near
-# SotA numbers
 
 class Config(object):
-  """Holds model hyperparams and data information.
-
-  The config class is used to store various hyperparameters and dataset
-  information parameters. Model objects are passed a Config() object at
-  instantiation.
-  """
   batch_size = 64
   embed_size = 50
   hidden_size = 100
@@ -55,66 +46,14 @@ class RNNLM_Model(LanguageModel):
       self.encoded_test = self.encoded_test[:num_debug]
 
   def add_placeholders(self):
-    """Generate placeholder variables to represent the input tensors
-
-    These placeholders are used as inputs by the rest of the model building
-    code and will be fed data during training.  Note that when "None" is in a
-    placeholder's shape, it's flexible
-
-    Adds following nodes to the computational graph.
-    (When None is in a placeholder's shape, it's flexible)
-
-    input_placeholder: Input placeholder tensor of shape
-                       (None, num_steps), type tf.int32
-    labels_placeholder: Labels placeholder tensor of shape
-                        (None, num_steps), type tf.float32
-    dropout_placeholder: Dropout value placeholder (scalar),
-                         type tf.float32
-
-    Add these placeholders to self as the instance variables
-  
-      self.input_placeholder
-      self.labels_placeholder
-      self.dropout_placeholder
-
-    (Don't change the variable names)
-    """
-    ### YOUR CODE HERE
-    '''
-    self.input_placeholder=tf.placeholder(tf.int32,shape=(None,self.config.num_steps))
-    self.labels_placeholder=tf.placeholder(tf.float32,shape=(None,self.config.num_steps))
-    self.dropout_placeholder=tf.placeholder(tf.float32,shape=(None))
-    '''
+    
     self.input_placeholder = tf.placeholder(tf.int32, (None, self.config.num_steps))
     self.labels_placeholder = tf.placeholder(tf.float32, (None, self.config.num_steps))
     self.dropout_placeholder = tf.placeholder(tf.float32)
-    ### END YOUR CODE
+
   
   def add_embedding(self):#将one-hot转化为词向量
-    """Add embedding layer.
-
-    Hint: This layer should use the input_placeholder to index into the
-          embedding.
-    Hint: You might find tf.nn.embedding_lookup useful.
-    Hint: You might find tf.split, tf.squeeze useful in constructing tensor inputs
-    Hint: Check the last slide from the TensorFlow lecture.
-    Hint: Here are the dimensions of the variables you will need to create:
-
-      L: (len(self.vocab), embed_size)
-
-    Returns:
-      inputs: List of length num_steps, each of whose elements should be
-              a tensor of shape (batch_size, embed_size).
-    """
-    # The embedding lookup is currently only implemented for the CPU
-    '''
-    with tf.device('/cpu:0'):
-      ### YOUR CODE HERE
-      L=tf.get_variable("L",shape=(len(self.vocab),self.config.embed_size))
-      embedding=tf.nn.embedding_lookup(L,self.input_placeholder)
-      inputs=[tf.squeeze(x) for x in tf.split(0,self.config.num_steps,embedding)]###tf.squeeze(x) remove shape=1
-      ### END YOUR CODE
-    '''
+    
     inputs = []
     with tf.device('/cpu:0'):
       L = tf.get_variable("Embedding", (len(self.vocab), self.config.embed_size))
@@ -124,77 +63,28 @@ class RNNLM_Model(LanguageModel):
       for tensor in split_tensors:
 
         inputs.append(tf.squeeze(tensor, [1]))
-      #print inputs
       return inputs#返回的是一个list
 
   def add_projection(self, rnn_outputs):#把隐藏层转化为词语
-    """Adds a projection layer.
-
-    The projection layer transforms the hidden representation to a distribution
-    over the vocabulary.
-
-    Hint: Here are the dimensions of the variables you will need to
-          create 
-          
-          U:   (hidden_size, len(vocab))
-          b_2: (len(vocab),)
-
-    Args:
-      rnn_outputs: List of length num_steps, each of whose elements should be
-                   a tensor of shape (batch_size, embed_size).
-    Returns:
-      outputs: List of length num_steps, each a tensor of shape
-               (batch_size, len(vocab)
-    """
-    ### YOUR CODE HERE
+    
     with tf.variable_scope("projection"):
       U=tf.get_variable("U",shape=(self.config.hidden_size,len(self.vocab)))
       b_2=tf.get_variable("b_2",shape=(len(self.vocab),))
     outputs=[tf.matmul(x,U)+b_2 for x in rnn_outputs]###softmax?
     
-    ### END YOUR CODE
+
     return outputs
 
   def add_loss_op(self, output):#计算损失函数
-    """Adds loss ops to the computational graph.
-
-    Hint: Use tensorflow.python.ops.seq2seq.sequence_loss to implement sequence loss. 
-
-    Args:
-      output: A tensor of shape (None, self.vocab)
-    Returns:
-      loss: A 0-d tensor (scalar)
-    """
-    ### YOUR CODE HERE
-    ###labels = tf.reshape(self.labels_placeholder,[-1])
-    ###loss = sequence_loss([output], [labels], [tf.ones(tf.shape(labels))])
+    
     loss = sequence_loss([output], [tf.reshape(self.labels_placeholder, [-1])], [tf.ones([self.config.batch_size * self.config.num_steps])])
-    ### END YOUR CODE
+
     return loss
 
   def add_training_op(self, loss):#对损失函数进行优化
-    """Sets up the training Ops.
-
-    Creates an optimizer and applies the gradients to all trainable variables.
-    The Op returned by this function is what must be passed to the
-    `sess.run()` call to cause the model to train. See 
-
-    https://www.tensorflow.org/versions/r0.7/api_docs/python/train.html#Optimizer
-
-    for more information.
-
-    Hint: Use tf.train.AdamOptimizer for this model.
-          Calling optimizer.minimize() will return a train_op object.
-
-    Args:
-      loss: Loss tensor, from cross_entropy_loss.
-    Returns:
-      train_op: The Op for training.
-    """
-    ### YOUR CODE HERE
+    
     optimizer=tf.train.AdamOptimizer(self.config.lr)
     train_op=optimizer.minimize(loss)
-    ### END YOUR CODE
     return train_op
   
   def __init__(self, config):
@@ -204,57 +94,14 @@ class RNNLM_Model(LanguageModel):
     self.inputs = self.add_embedding()
     self.rnn_outputs = self.add_model(self.inputs)
     self.outputs = self.add_projection(self.rnn_outputs)
-  
-    # We want to check how well we correctly predict the next word
-    # We cast o to float64 as there are numerical issues at hand
-    # (i.e. sum(output of softmax) = 1.00000298179 and not 1)
     self.predictions = [tf.nn.softmax(tf.cast(o, 'float64')) for o in self.outputs]
-    # Reshape the output into len(vocab) sized chunks - the -1 says as many as
-    # needed to evenly divide
     output = tf.reshape(tf.concat(1, self.outputs), [-1, len(self.vocab)])
     self.calculate_loss = self.add_loss_op(output)
     self.train_step = self.add_training_op(self.calculate_loss)
 
 
   def add_model(self, inputs):
-    """Creates the RNN LM model.
-
-    In the space provided below, you need to implement the equations for the
-    RNN LM model. Note that you may NOT use built in rnn_cell functions from
-    tensorflow.
-
-    Hint: Use a zeros tensor of shape (batch_size, hidden_size) as
-          initial state for the RNN. Add this to self as instance variable
-
-          self.initial_state
-  
-          (Don't change variable name)
-    Hint: Add the last RNN output to self as instance variable
-
-          self.final_state
-
-          (Don't change variable name)
-    Hint: Make sure to apply dropout to the inputs and the outputs.
-    Hint: Use a variable scope (e.g. "RNN") to define RNN variables.
-    Hint: Perform an explicit for-loop over inputs. You can use
-          scope.reuse_variables() to ensure that the weights used at each
-          iteration (each time-step) are the same. (Make sure you don't call
-          this for iteration 0 though or nothing will be initialized!)
-    Hint: Here are the dimensions of the various variables you will need to
-          create:
-      
-          H: (hidden_size, hidden_size) 
-          I: (embed_size, hidden_size)
-          b_1: (hidden_size,)
-
-    Args:
-      inputs: List of length num_steps, each of whose elements should be
-              a tensor of shape (batch_size, embed_size).
-    Returns:
-      outputs: List of length num_steps, each of whose elements should be
-               a tensor of shape (batch_size, hidden_size)
-    """
-    ### YOUR CODE HERE
+    
     hidden_size=self.config.hidden_size
     embed_size=self.config.embed_size
     batch_size=self.config.batch_size
@@ -270,7 +117,6 @@ class RNNLM_Model(LanguageModel):
       pre_h=tf.sigmoid(tf.matmul(pre_h,H)+tf.matmul(step,I)+b_1)
       rnn_outputs.append(tf.nn.dropout(pre_h,self.dropout_placeholder))
     self.final_state=pre_h
-    ### END YOUR CODE
     return rnn_outputs
 
 
@@ -285,8 +131,6 @@ class RNNLM_Model(LanguageModel):
     state = self.initial_state.eval()
     for step, (x, y) in enumerate(
       ptb_iterator(data, config.batch_size, config.num_steps)):
-      # We need to pass in the initial state and retrieve the final state to give
-      # the RNN proper history
       feed = {self.input_placeholder: x,
               self.labels_placeholder: y,
               self.initial_state: state,
@@ -304,65 +148,33 @@ class RNNLM_Model(LanguageModel):
 
 def generate_text(session, model, config, starting_text='<eos>',next_text='<eos>',
                   stop_length=100, temp=1.0):
-  """Generate text from the model.
-
-  Hint: Create a feed-dictionary and use sess.run() to execute the model. Note
-        that you will need to use model.initial_state as a key to feed_dict
-  Hint: Fetch model.final_state and model.predictions[-1]. (You set
-        model.final_state in add_model() and model.predictions is set in
-        __init__)
-  Hint: Store the outputs of running the model in local variables state and
-        y_pred (used in the pre-implemented parts of this function.)
-
-  Args:
-    session: tf.Session() object
-    model: Object of type RNNLM_Model
-    config: A Config() object
-    starting_text: Initial text passed to model.
-  Returns:
-    output: List of word idxs
-  """
+  
   state = model.initial_state.eval()
   stop_tokens=['<eos>']
-  # Imagine tokens as a batch size of one, length of len(tokens[0])
   tokens = [model.vocab.encode(word) for word in starting_text.split()]#找到starting_text中单词的索引
-  #print tokens
-  #for i in xrange(stop_length):
-    ### YOUR CODE HERE
+
   token_list = np.array(tokens[-1]).reshape((1, model.config.num_steps))#最近的结果作为下一次的输入
-    #print token_list
   feed = {model.input_placeholder: token_list,
               model.initial_state: state,
               model.dropout_placeholder: 1}
-    #print model.predictions[-1]
+
   y_pred, state = session.run(
           [model.predictions[-1], model.final_state], feed_dict=feed)#model.predictions[-1]为模型前一个的预测结果
-    ### END YOUR CODE
   b=model.vocab.encode(next_text)
-    #print model.vocab.word_to_index[next_text]
   pro= select(y_pred[0],b, temperature=temp)
   return pro
-  '''
-    tokens.append(next_word_idx)#在tokens的结尾加入新的word的id
-    if stop_tokens and model.vocab.decode(tokens[-1]) in stop_tokens:#如果在stop_tokens中，跳出
-      break
-  output = [model.vocab.decode(word_idx) for word_idx in tokens]
-  return output
-  '''
+
 
 def generate_sentence(session, model, config, *args1, **kwargs):
-  """Convenice to generate a sentence from the model."""
   return generate_text(session, model, config, *args1, stop_tokens=['<eos>'], **kwargs)
 
 def test_RNNLM():
   config = Config()
   gen_config = deepcopy(config)
   gen_config.batch_size = gen_config.num_steps = 1
-  #print config.batch_size
-  # We create the training model and generative model
+
   with tf.variable_scope('RNNLM') as scope:
     model = RNNLM_Model(config)
-    # This instructs gen_model to reuse the same variables as the model above
     scope.reuse_variables()
     gen_model = RNNLM_Model(gen_config)
 
