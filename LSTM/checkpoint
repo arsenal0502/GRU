@@ -1,2 +1,0 @@
-model_checkpoint_path: "ptb_rnnlm.weights"
-all_model_checkpoint_paths: "ptb_rnnlm.weights"
